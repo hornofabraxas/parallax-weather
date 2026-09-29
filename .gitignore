@@ -1,0 +1,8 @@
+build/
+.lock-waf*
+node_modules/
+art/out/
+tools/face
+*.pyc
+__pycache__/
+.DS_Store

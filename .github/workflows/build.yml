@@ -1,0 +1,86 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The SDK's bundled waf dies with "AssertionError: SRE module mismatch" on Python 3.11.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install pebble-tool
+        run: pip install pebble-tool==5.0.39
+
+      # Pinned so a tagged release is reproducible; bump deliberately.
+      - name: Install Pebble SDK
+        run: pebble sdk install 4.33.1
+
+      - name: Tests
+        run: sh tools/run_tests.sh
+
+      - name: Resource sanity
+        run: |
+          # resources/ is generated on macOS (tools/build_assets.sh); the packer part is portable,
+          # so at least the sky curves and layout must round-trip. Full regeneration needs CoreText.
+          # Round 2 (gabbro) art sits beside it with the ~gabbro tag (the moon is shared).
+          python3 - <<'EOF'
+          import glob, os, struct
+          for name, rows in (("sky.bin", 229), ("sky~gabbro.bin", 261)):
+              d = open("resources/" + name, "rb").read()
+              g, b = struct.unpack_from("<HH", d)
+              assert len(d) == 4 + 2 * (g + b) and g == rows, name
+          for name in ("layout.bin", "layout~gabbro.bin"):
+              assert os.path.getsize("resources/" + name) == 424, name
+          tex = glob.glob("resources/tex_*~gabbro.pl2")
+          assert len(tex) == 9 and all(struct.unpack_from("<HH", open(n, "rb").read()) == (292, 292) for n in tex), tex
+          EOF
+
+      - name: Build
+        run: pebble build
+
+      - name: Verify the embedded version
+        run: |
+          set -euo pipefail
+          PKG=$(python3 -c "import json;print(json.load(open('package.json'))['version'])")
+          EMB=$(unzip -p build/*.pbw appinfo.json | python3 -c "import json,sys;print(json.load(sys.stdin)['versionLabel'])")
+          echo "package.json=$PKG  embedded=$EMB"
+          if [ "$PKG" != "$EMB" ]; then
+            echo "::error::versionLabel $EMB does not match package.json $PKG"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$PKG" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json v$PKG"
+            exit 1
+          fi
+          LISTING=$(unzip -l build/*.pbw)  # captured first: grep -q under pipefail could SIGPIPE unzip
+          for p in emery gabbro; do
+            grep -q " $p/pebble-app.bin" <<<"$LISTING" || { echo "::error::no $p binary in the pbw"; exit 1; }
+          done
+          mkdir -p dist
+          cp build/*.pbw "dist/parallax-weather-$PKG.pbw"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pbw
+          path: dist/*.pbw
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*.pbw
+          body_path: .github/release-notes.md  # install note and the image credits the licences ask for
+          generate_release_notes: true

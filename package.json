@@ -1,0 +1,159 @@
+{
+  "name": "parallax-weather",
+  "author": "OmgSlayKween",
+  "version": "1.0",
+  "private": true,
+  "keywords": [
+    "pebble-app",
+    "watchface"
+  ],
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Parallax Weather",
+    "uuid": "7f7e528f-7dd9-49ba-8932-69fd1aa8ce6c",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "location",
+      "configurable"
+    ],
+    "messageKeys": [
+      "REQUEST",
+      "READY",
+      "WX_STATE",
+      "WX_TIME",
+      "WX_FAILED",
+      "SUN_TIMES",
+      "SUN_PEAK",
+      "MOON_PHASE",
+      "MOON_TIME",
+      "HEMISPHERE",
+      "CFG_BORDER",
+      "CFG_SKY",
+      "CFG_TILT",
+      "CFG_REFRESH",
+      "CFG_BG"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "raw",
+          "name": "TEX_SUNNY",
+          "file": "tex_sunny.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_PARTLY",
+          "file": "tex_partly.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_CLOUDY",
+          "file": "tex_cloudy.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_RAIN",
+          "file": "tex_rain.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_SNOW",
+          "file": "tex_snow.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_STORM",
+          "file": "tex_storm.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_FOG",
+          "file": "tex_fog.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_PARTLY_NIGHT",
+          "file": "tex_partly_night.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "TEX_CLOUDY_NIGHT",
+          "file": "tex_cloudy_night.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "MOON",
+          "file": "moon.pl2"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_0",
+          "file": "digit_0.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_1",
+          "file": "digit_1.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_2",
+          "file": "digit_2.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_3",
+          "file": "digit_3.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_4",
+          "file": "digit_4.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_5",
+          "file": "digit_5.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_6",
+          "file": "digit_6.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_7",
+          "file": "digit_7.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_8",
+          "file": "digit_8.bin"
+        },
+        {
+          "type": "raw",
+          "name": "DIGIT_9",
+          "file": "digit_9.bin"
+        },
+        {
+          "type": "raw",
+          "name": "LAYOUT",
+          "file": "layout.bin"
+        },
+        {
+          "type": "raw",
+          "name": "SKY",
+          "file": "sky.bin"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,3 @@
+#!/bin/sh
+# pebble-tool under Python 3.11: the emulator comms hang on newer Pythons.
+exec uvx --python 3.11 --from pebble-tool pebble "$@"
