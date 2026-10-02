@@ -40,6 +40,9 @@
 #define HYSTERESIS_16 10   // an offset moves only when the tilt is 10/16 px past it: no 1 px flicker
 #define GLOW_STEP_MS 60    // the night glow ramps 1/4 -> full over three steps
 #define LIGHT_SETTLE_MS 50 // light-on waits this long: a notification that lit the screen has taken focus by then
+#define BRIDGE_MS 100      // the stand-in accelerometer session after the tilt stops (see anim_stop)
+#define BRIDGE_SAMPLES 25  // its batch: 2.5 s at 10 Hz, so it never delivers within BRIDGE_MS
+_Static_assert(BRIDGE_MS * 10 <= BRIDGE_SAMPLES * 100, "the bridge must not fill a batch before it is dropped");
 
 static const uint32_t TEX_RES[TEX_COUNT] = {
   RESOURCE_ID_TEX_SUNNY, RESOURCE_ID_TEX_PARTLY, RESOURCE_ID_TEX_CLOUDY, RESOURCE_ID_TEX_RAIN,
@@ -106,7 +109,9 @@ static AppTimer *s_anim_timer;  // light check and hard stop
 static uint32_t s_anim_start;
 static AppTimer *s_glow_timer;
 static AppTimer *s_light_timer;  // light-on, waiting to see whether the face is covered
+static AppTimer *s_bridge_timer;
 static bool s_anim;
+static bool s_bridge;  // the stand-in accelerometer session is subscribed
 static bool s_focused = true;  // false while a notification or other modal covers the face
 static bool s_accel_first;
 static int32_t s_fx, s_fy, s_bx, s_by;  // filtered accel and the parallax origin, milli-g << 4
@@ -120,10 +125,7 @@ static uint32_t now_ms(void) {
 
 #if PERF_LOG
 static int largest_block(void) {
-  // probe the largest single allocation that would succeed (free memory is not contiguous memory).
-  // Never while the accelerometer runs: briefly holding the whole heap then faults the app inside
-  // the firmware (about 1 light-off in 10 in the emulator, PC 0xb501c).
-  if (s_anim) return -1;
+  // probe the largest single allocation that would succeed (free memory is not contiguous memory)
   int lo = 0, hi = (int)heap_bytes_free();
   while (lo < hi) {
     const int mid = (lo + hi + 1) / 2;
@@ -374,10 +376,35 @@ static void accel_handler(AccelData *data, uint32_t n) {
   }
 }
 
+static void accel_ignore(AccelData *data, uint32_t n) {}
+
+static void bridge_end(void) {
+  if (s_bridge_timer) app_timer_cancel(s_bridge_timer);
+  s_bridge_timer = NULL;
+  if (!s_bridge) return;
+  s_bridge = false;
+  accel_data_service_unsubscribe();  // safe: the bridge cannot have a batch waiting yet
+}
+
+static void bridge_timeout(void *ctx) {
+  s_bridge_timer = NULL;
+  bridge_end();
+}
+
 static void anim_stop(void) {
   if (!s_anim) return;
   s_anim = false;
   accel_data_service_unsubscribe();
+  // PebbleOS bug: unsubscribing while a sample batch is still queued for the face marks the app's
+  // accelerometer state for a deferred free, and when that batch is drained with nothing subscribed
+  // the firmware frees memory it never allocated and the app faults (emulator PC 0xb501c). At
+  // 50 Hz, one sample a batch, a batch is often queued, above all while a frame is drawing. A
+  // stand-in session catches the stale batch, which is already queued and so drains before
+  // bridge_timeout fires.
+  accel_data_service_subscribe(BRIDGE_SAMPLES, accel_ignore);
+  accel_service_set_sampling_rate(ACCEL_SAMPLING_10HZ);
+  s_bridge = true;
+  s_bridge_timer = app_timer_register(BRIDGE_MS, bridge_timeout, NULL);
   if (s_anim_timer) app_timer_cancel(s_anim_timer);
   s_anim_timer = NULL;
   if (s_state.tilt_x || s_state.tilt_y) layer_mark_dirty(s_layer);
@@ -400,6 +427,7 @@ static void anim_start(void) {
   if (s_anim || !s_in.tilt || !s_focused) return;
   s_anim = true;
   s_accel_first = true;
+  bridge_end();  // never subscribe over a live session: the firmware would leak it and free its buffer
   accel_data_service_subscribe(1, accel_handler);
   accel_service_set_sampling_rate(ACCEL_SAMPLING_50HZ);
   s_anim_start = now_ms();
@@ -780,6 +808,7 @@ static void deinit(void) {
   if (s_light_timer) app_timer_cancel(s_light_timer);
   s_light_timer = NULL;
   anim_stop();
+  bridge_end();  // the face is exiting: no queued batch will be drained
   glow_set(false);
   backlight_service_unsubscribe();
   app_focus_service_unsubscribe();

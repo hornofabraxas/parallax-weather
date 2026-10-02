@@ -141,10 +141,10 @@ on while lit, focus flag on `did_focus(false)`) and the compositor equivalence t
 the full tilt range.
 
 Emulator light cycling (100 plus on/off cycles) turned up one fault, only in `PERF_LOG` builds and
-already in v0.1: the heap probe behind the "largest" figure briefly takes the whole heap, and
-doing that while the accelerometer runs faulted the app inside the firmware (PC 0xb501c) about one
-light-off in ten. The probe now skips while the tilt runs (logs -1). Release builds: 0 faults in 30
-cycles; `PERF_LOG` builds after the fix: 0 in 40.
+already in v0.1: the app faulted inside the firmware (PC 0xb501c) about one light-off in ten. It was
+blamed on the `PERF_LOG` heap probe at the time; v1.1 found the real cause, a firmware bug in
+accelerometer unsubscribe (see "v1.1: accelerometer unsubscribe crash" below). The slow logging
+only made it more likely.
 
 Considered and not done:
 - **Sun position steps.** The sky re-renders when the sun moves a pixel (every few minutes, 2 to
@@ -281,3 +281,24 @@ battery.
 - **Scrubbed:** personal names, private links and local paths from the docs; the settings page's
   example coordinates are now Greenwich, and the phone tests use Denver's published sun times.
 - **History:** one fresh commit; earlier versions (v0.2.0 to v0.5.0) are not published.
+
+## v1.1: accelerometer unsubscribe crash (2026-10-02)
+
+Rare crashes on the wrist ("not responding" after two within a minute), one while bowling. Cause:
+a PebbleOS bug, present since the original Pebble code. If an app unsubscribes from accelerometer
+data while a sample batch is still queued for it, the firmware marks the app's accelerometer state
+for a deferred free; when that batch is drained with nothing subscribed it calls `kernel_free()` on
+memory inside the app's state and the app faults (emulator PC 0xb501c, LR 0x27c2b). The tilt asks
+for one sample a batch at 50 Hz, so a batch is often queued, above all while a frame is drawing:
+a light-off (or a notification, or the 30 s cap) with the wrist moving was the likely trigger.
+
+| Check | Result |
+| --- | --- |
+| Test app: subscribe 1 at 50 Hz, busy 60 ms, unsubscribe | Faults on the first cycle, every run |
+| Same, then a stand-in session dropped 100 ms later | 154 cycles, no fault |
+
+Fix (`anim_stop`): right after unsubscribing, subscribe a stand-in session (25 samples at 10 Hz,
+ignored) and drop it from a 100 ms timer. The stale batch is already queued, so it drains first and
+finds a live session; the stand-in cannot fill a batch of its own in 100 ms. `anim_start` drops the
+stand-in before subscribing, because subscribing over a live session leaks it in the firmware and
+frees the buffer it still writes into. The `PERF_LOG` heap probe no longer skips while the tilt runs.
